@@ -131,3 +131,6 @@ dmypy.json
 # ignore folders
 docs/
 source/
+meta/
+data/
+*.ipynb
