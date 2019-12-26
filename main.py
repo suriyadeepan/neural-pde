@@ -62,7 +62,7 @@ if __name__ == '__main__':
   t_train, x_train, u_train, v_train = torch_em(
       trainset.t, trainset.x, trainset.u, trainset.v)
   t_train, x_train = nnutils.variable(t_train, x_train)
-  for i in range(30):
+  for i in range(2):  # 30
     # train uv sub-network
     idn_net.train_uv_net(t_train, x_train, u_train, v_train)
     # train uv sub-network
