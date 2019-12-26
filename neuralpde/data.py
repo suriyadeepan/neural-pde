@@ -27,3 +27,7 @@ def schrodinger(filepath="data/NLS.mat", N=None):
     schrod_df = schrod_df.sample(N)
 
   return schrod_df, bounds
+
+
+def schrodinger_constraints():
+  df, bounds = schrodinger()
