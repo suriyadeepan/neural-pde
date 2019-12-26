@@ -23,8 +23,7 @@ def schrodinger(filepath="data/NLS.mat", N=None):
   # make a data frame
   schrod_df =  pd.DataFrame({'t' : t_flat, 'x' : x_flat, 'u' : u_flat, 'v' : v_flat })
   bounds = { 'x' : (-5., 5.), 't' : (0., np.pi / 2) }
-  if N is not None:
+  if N is not None:  # sample from data frame
     schrod_df = schrod_df.sample(N)
-
 
   return schrod_df, bounds
