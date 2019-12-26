@@ -46,14 +46,33 @@ if __name__ == '__main__':
   #  - read dynamics data from .mat file
   #  - sample N data points
   N = 10000
-  schrod_df, bounds = data.schrodinger(N=N)
+  schrod_df, bounds = data.schrodinger()
+  # sub-sample from data frame
+  trainset = schrod_df.sample(N)
   # specs for sub-networks
   uv_layers = [2, 50, 50, 50, 50, 1]
   pde_layers = [6, 100, 100, 1]
+  # set training specs
+  lbfgs_max_iter, lbfgs_max_eval = 30, 40
   # instantiate identification net
-  idn_net = dhpm.IDNnet(uv_layers, pde_layers, bounds)
+  idn_net = dhpm.IDNnet(uv_layers, pde_layers, bounds,
+      lbfgs_max_iter=lbfgs_max_iter,
+      lbfgs_max_eval=lbfgs_max_eval)
   # make trainable data
-  t, x, u, v = torch_em(schrod_df.t, schrod_df.x, schrod_df.u, schrod_df.v)
-  t, x = nnutils.variable(t, x)
-  # train uv sub-network
-  idn_net.train_uv_net(t, x, u, v)
+  t_train, x_train, u_train, v_train = torch_em(
+      trainset.t, trainset.x, trainset.u, trainset.v)
+  t_train, x_train = nnutils.variable(t_train, x_train)
+  for i in range(30):
+    # train uv sub-network
+    idn_net.train_uv_net(t_train, x_train, u_train, v_train)
+    # train uv sub-network
+    idn_net.train_fg_net(t_train, x_train)
+    # run post-training prediction
+    #  gather data from dynamics
+    t, x, u, v = torch_em(schrod_df.t, schrod_df.x, schrod_df.u, schrod_df.v)
+    t, x, = nnutils.variable(t, x)
+    # predict (u, v, f, g)
+    u_pred, v_pred, f_pred, g_pred = idn_net.predict(t, x)
+    u_error = torch.norm(u - u_pred, p=2) / torch.norm(u, p=2)
+    v_error = torch.norm(v - v_pred, p=2) / torch.norm(v, p=2)
+    print(f'[{i+1}] Error (u, v) : ({u_error.item()}, {v_error.item()}')

@@ -13,21 +13,26 @@ def tx_norm(t, x, bounds):
 
 class IDNnet:
 
-  def __init__(self, uv_layers, pde_layers, bounds):
+  def __init__(self, uv_layers, pde_layers, bounds,
+      lbfgs_max_iter=20, lbfgs_max_eval=25):
     self.bounds = bounds
     self.u_net = nnutils.NeuralNet(uv_layers)
     self.v_net = nnutils.NeuralNet(uv_layers)
     self.pde_u_net = nnutils.NeuralNet(pde_layers)
     self.pde_v_net = nnutils.NeuralNet(pde_layers)
-    # optimizers
+    # (UV Sub-network) L-BFGS optimizer
     self.lbfgs_optim_uv = torch.optim.LBFGS(
         nnutils.chain_params(self.u_net, self.v_net),
-        # max_iter=50000,
-        # max_eval=50000,
+        max_iter=lbfgs_max_iter, max_eval=lbfgs_max_eval,
         tolerance_change=1.0 * np.finfo(float).eps)
+    # (FG Sub-network) L-BFGS optimizer
+    self.lbfgs_optim_fg = torch.optim.LBFGS(
+        nnutils.chain_params(self.pde_u_net, self.pde_v_net),
+        max_iter=lbfgs_max_iter, max_eval=lbfgs_max_eval,
+        tolerance_change=1.0 * np.finfo(float).eps)
+    # Adam Optimizer
     self.adam_optim_uv = torch.optim.Adam(
         nnutils.chain_params(self.u_net, self.v_net))
-    # self.lbfgs_optim.step()
 
   def uv_net(self, t, x):
     x_norm = tx_norm(t, x, self.bounds)
@@ -85,3 +90,19 @@ class IDNnet:
       return uv_loss_
 
     self.lbfgs_optim_uv.step(closure)
+
+  def train_fg_net(self, t, x):
+
+    def closure():
+      # zero grad
+      self.lbfgs_optim_fg.zero_grad()
+      # run prediction
+      u_pred, v_pred, f_pred, g_pred = self.predict(t, x)
+      # calculate loss
+      fg_loss_ = self.fg_loss(f_pred, g_pred)
+      # backward 
+      fg_loss_.backward()
+      # return loss
+      return fg_loss_
+
+    self.lbfgs_optim_fg.step(closure)
