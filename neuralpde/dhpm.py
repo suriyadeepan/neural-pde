@@ -14,12 +14,15 @@ def tx_norm(t, x, bounds):
 class IDNnet:
 
   def __init__(self, uv_layers, pde_layers, bounds,
-      lbfgs_max_iter=20, lbfgs_max_eval=25):
+      lbfgs_max_iter=20, lbfgs_max_eval=25,
+      u_net=None, v_net=None,
+      pde_u_net=None, pde_v_net=None):
     self.bounds = bounds
-    self.u_net = nnutils.NeuralNet(uv_layers)
-    self.v_net = nnutils.NeuralNet(uv_layers)
-    self.pde_u_net = nnutils.NeuralNet(pde_layers)
-    self.pde_v_net = nnutils.NeuralNet(pde_layers)
+    # setup sub-networks
+    self.u_net = nnutils.NeuralNet(uv_layers) if u_net is None else u_net
+    self.v_net = nnutils.NeuralNet(uv_layers) if v_net is None else v_net
+    self.pde_u_net = nnutils.NeuralNet(pde_layers) if pde_u_net is None else pde_u_net
+    self.pde_v_net = nnutils.NeuralNet(pde_layers) if pde_v_net is None else pde_v_net
     # (UV Sub-network) L-BFGS optimizer
     self.lbfgs_optim_uv = torch.optim.LBFGS(
         nnutils.chain_params(self.u_net, self.v_net),
@@ -110,11 +113,11 @@ class IDNnet:
 
 class PiNeuralNet:
 
-  def __init__(self, uv_layers, bounds,
+  def __init__(self, bounds, u_net, v_net, pde_net,
       lbfgs_max_iter=20, lbfgs_max_eval=25):
     self.bounds = bounds
-    self.u_net = nnutils.NeuralNet(uv_layers)
-    self.v_net = nnutils.NeuralNet(uv_layers)
+    self.u_net = u_net
+    self.v_net = v_net
     # (UV Sub-network) L-BFGS optimizer
     self.lbfgs_optim_uv = torch.optim.LBFGS(
         nnutils.chain_params(self.u_net, self.v_net),
@@ -168,3 +171,53 @@ class PiNeuralNet:
       return loss
 
     self.lbfgs_optim_uv.step(closure)
+
+
+class DeepHPM:
+
+  def __init__(self, uv_layers, pde_layers, bounds,
+      lbfgs_max_iter=(20, 20), lbfgs_max_eval=(25, 25)):
+    self.bounds = bounds
+    # initialize sub-networks
+    self.u_net = nnutils.NeuralNet(uv_layers)
+    self.v_net = nnutils.NeuralNet(uv_layers)
+    self.pde_u_net = nnutils.NeuralNet(pde_layers)
+    self.pde_v_net = nnutils.NeuralNet(pde_layers)
+    # create Identification Network
+    self.idn_net = IDNnet(uv_layers, pde_layers, bounds,
+        lbfgs_max_iter=lbfgs_max_iter[0],    # lbfgs options
+        lbfgs_max_eval=lbfgs_max_eval[0],    # ..
+        u_net=self.u_net, v_net=self.v_net,  # share sub-networks
+        pde_u_net=self.pde_u_net, pde_v_net=self.pde_v_net)
+    # create Physics-informed Neural Network
+    self.pinn = PiNeuralNet(bounds,
+        u_net=self.u_net, v_net=self.v_net,  # shared sub-networks
+        pde_net=self.idn_net.pde_net,        # use method of idn_net
+        lbfgs_max_iter=lbfgs_max_iter[1],    # ..
+        lbfgs_max_eval=lbfgs_max_eval[1])    # lbfgs options
+
+  def train_idn_net(self, trainset, evalset, epochs=2):
+    # expand trainset
+    t, x, u, v = trainset
+    # make variables
+    t, x = nnutils.variable(t, x)
+    #  gather eval data
+    te, xe, ue, ve = evalset
+    # make variables
+    te, xe = nnutils.variable(te, xe)
+    # keep track of losses
+    losses = []
+    for i in range(epochs):
+      # train uv sub-network
+      self.idn_net.train_uv_net(t, x, u, v)
+      # train fg sub-network
+      self.idn_net.train_fg_net(t, x)
+      # run post-training prediction
+      #  predict (u, v, f, g)
+      u_pred, v_pred, f_pred, g_pred = self.idn_net.predict(te, xe)
+      u_error = torch.norm(ue - u_pred, p=2) / torch.norm(ue, p=2)
+      v_error = torch.norm(ve - v_pred, p=2) / torch.norm(ve, p=2)
+      print(f'[{i+1}] Error (u, v) : ({u_error.item()}, {v_error.item()}')
+      losses.append((u_error, v_error))
+    # return loss history
+    return losses
