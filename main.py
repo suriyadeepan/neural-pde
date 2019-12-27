@@ -89,8 +89,8 @@ if __name__ == '__main__':
   pde_layers = [6, 100, 100, 1]
   # set training specs
   lbfgs_max_iter, lbfgs_max_eval = (20, 20), (25, 25)
-  # DeepHPM < model specs and space-time bounds
-  model = dhpm.DeepHPM(uv_layers, pde_layers, bounds)
+  model = dhpm.DeepHPM(uv_layers, pde_layers, bounds,  # model specs and space-time bounds
+            lbfgs_max_iter=lbfgs_max_iter, lbfgs_max_eval=lbfgs_max_eval)
   # make train set
   t_train, x_train, u_train, v_train = torch_em(  # convert to torch tensors
       trainset.t, trainset.x, trainset.u, trainset.v)
@@ -98,6 +98,9 @@ if __name__ == '__main__':
   t_eval, x_eval, u_eval, v_eval = torch_em(      # convert to torch tensors
       schrod_df.t, schrod_df.x, schrod_df.u, schrod_df.v)
   # train IDN net
-  model.train_idn_net(
-      trainset=(t_train, x_train, u_train, v_train),
-      evalset=(t_eval, x_eval, u_eval, v_eval), epochs=1)
+  # model.train_idn_net(
+  #     trainset=(t_train, x_train, u_train, v_train),
+  #     evalset=(t_eval, x_eval, u_eval, v_eval), epochs=2)
+  # train PiNN
+  #  feed Schrodinger Constraints data
+  model.train_pinn(*data.schrodinger_constraints(torched=True), epochs=1)

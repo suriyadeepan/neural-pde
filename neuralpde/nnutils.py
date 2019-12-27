@@ -43,3 +43,11 @@ def torch_em(*ts):
 
 def variable(*ts, requires_grad=True):
   return [ Variable(t, requires_grad=requires_grad) for t in ts ]
+
+
+def tv(a):
+  return Variable(torch.tensor(a).float(), requires_grad=True)
+
+
+def t(a):
+  return torch.tensor(a).float()

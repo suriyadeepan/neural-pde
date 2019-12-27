@@ -118,6 +118,7 @@ class PiNeuralNet:
     self.bounds = bounds
     self.u_net = u_net
     self.v_net = v_net
+    self.pde_net = pde_net
     # (UV Sub-network) L-BFGS optimizer
     self.lbfgs_optim_uv = torch.optim.LBFGS(
         nnutils.chain_params(self.u_net, self.v_net),
@@ -132,7 +133,7 @@ class PiNeuralNet:
 
   def fg_net(self, t, x):
     # get u, v
-    u, v = self.uv_net(t, x)
+    u, v, _, _ = self.uv_net(t, x)
     # get first derivatives
     u_t = nnutils.jacobian(u, t)
     v_t = nnutils.jacobian(v, t)
@@ -146,21 +147,21 @@ class PiNeuralNet:
 
     return f, g
 
-  def train(self, inital_data, boundary_data, collocation_data):
+  def train(self, initial, boundary, collocation):
 
     def closure():
       # zero grad
       self.lbfgs_optim_uv.zero_grad()
       # run predictions
       #  [1] initial data
-      u0, v0, _, _ = self.uv_net(inital_data.t, inital_data.x)  # (0, x)
+      u0, v0, _, _ = self.uv_net(initial['t'], initial['x'])  # (0, x)
       #  [2] boundary data [ (t, -8), (t, +8) ]
-      u_lb, v_lb, u_x_lb, v_x_lb = self.uv_net(boundary_data.t_lb, boundary_data.x_lb)
-      u_ub, v_ub, u_x_ub, v_x_ub = self.uv_net(boundary_data.t_ub, boundary_data.x_ub)
+      u_lb, v_lb, u_x_lb, v_x_lb = self.uv_net(boundary['t_lb'], boundary['x_lb'])
+      u_ub, v_ub, u_x_ub, v_x_ub = self.uv_net(boundary['t_ub'], boundary['x_ub'])
       #  [3] collocation data
-      f, g = self.fg_net(collocation_data.t, collocation_data.x)
+      f, g = self.fg_net(collocation['t'], collocation['x'])
       # calculate loss
-      loss_initial = ((u0 - inital_data.u)**2).mean() + ((v0 - inital_data.v)**2).mean()
+      loss_initial = ((u0 - initial['u'])**2).mean() + ((v0 - initial['v'])**2).mean()
       loss_boundary = ((u_lb - u_ub)**2).mean() + ((v_lb - v_ub)**2).mean() + \
           ((u_x_lb - u_x_ub)**2).mean() + ((v_x_lb - v_x_ub)**2).mean()
       loss_collocation = (f**2).mean() + (g**2).mean()
@@ -221,3 +222,8 @@ class DeepHPM:
       losses.append((u_error, v_error))
     # return loss history
     return losses
+
+  def train_pinn(self, *data, epochs=2):
+    # create torch tensors and variables for training
+    for i in range(epochs):
+      self.pinn.train(*data)
