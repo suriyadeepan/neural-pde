@@ -1,6 +1,8 @@
-from scipy.io import loadmat
 import numpy as np
 import pandas as pd
+
+from scipy.io import loadmat
+from pyDOE import lhs as latin_hyper_cube
 
 
 def schrodinger(filepath="data/NLS.mat", N=None):
@@ -31,3 +33,30 @@ def schrodinger(filepath="data/NLS.mat", N=None):
 
 def schrodinger_constraints():
   df, bounds = schrodinger()
+  # [1] initial conditions
+  # (0, x)
+  x_len, t_len = len(df.x.unique()), len(df.t.unique())
+  # shuffle (0, 512)
+  idx_x = np.random.choice(x_len, x_len, replace=False)
+  initial = pd.DataFrame({
+    'x' : df.x[idx_x], 't' : np.zeros_like(df.x),
+    'u' : u[idx_x, 0], 'v' : v[idx_x, 0]})
+  # [2] boundary conditions
+  # shuffle (0, 501)
+  idx_t = np.random.choice(t_len, t_len, replace=False)
+  tb = df.t[idx_t]
+  boundary = pd.DataFrame({
+    'x_lb' : bounds['x'][0] + np.zeros_like(tb),
+    'x_ub' : bounds['x'][1] + np.zeros_like(tb),
+    't_lb' : tb,
+    't_ub' : tb
+    })
+  # [3] Collocation points
+  Nco = 20000  # number of points
+  lb = np.array([bounds['t'][0], bounds['x'][0]])
+  ub = np.array([bounds['t'][1], bounds['x'][1]])
+  # sample from latin hypercube
+  Xco = lb + (ub - lb) * latin_hyper_cube(2, Nco)
+  collocation = pd.DataFrame({ 'x' : Xco[:, 1], 't' : Xco[:, 0] })
+  # return constraints
+  return initial, boundary, collocation
