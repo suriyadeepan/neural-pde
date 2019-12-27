@@ -3,6 +3,7 @@ import pandas as pd
 
 from scipy.io import loadmat
 from pyDOE import lhs as latin_hyper_cube
+from neuralpde.nnutils import tv, t
 
 
 def schrodinger(filepath="data/NLS.mat", N=None):
@@ -31,15 +32,18 @@ def schrodinger(filepath="data/NLS.mat", N=None):
   return schrod_df, bounds
 
 
-def schrodinger_constraints():
+def schrodinger_constraints(filepath="data/NLS.mat", torched=False):
   df, bounds = schrodinger()
+  # read mat file
+  mat = loadmat(filepath)
+  u, v = np.real(mat['usol']), np.imag(mat['usol'])
   # [1] initial conditions
   # (0, x)
   x_len, t_len = len(df.x.unique()), len(df.t.unique())
   # shuffle (0, 512)
   idx_x = np.random.choice(x_len, x_len, replace=False)
   initial = pd.DataFrame({
-    'x' : df.x[idx_x], 't' : np.zeros_like(df.x),
+    'x' : df.x[idx_x], 't' : np.zeros_like(df.x[idx_x]),
     'u' : u[idx_x, 0], 'v' : v[idx_x, 0]})
   # [2] boundary conditions
   # shuffle (0, 501)
@@ -58,5 +62,25 @@ def schrodinger_constraints():
   # sample from latin hypercube
   Xco = lb + (ub - lb) * latin_hyper_cube(2, Nco)
   collocation = pd.DataFrame({ 'x' : Xco[:, 1], 't' : Xco[:, 0] })
-  # return constraints
+
+  if torched:
+    return torch_constraints(initial, boundary, collocation)
+
+  return initial, boundary, collocation
+
+
+def torch_constraints(initial, boundary, collocation):
+  # create torch tensors and variables for training
+  #  [1] Initial Data
+  initial = {
+      't' : tv(initial.t), 'x' : tv(initial.x),  # torch variables
+      'u' : t(initial.u), 'v' : t(initial.v)     # torch tensors
+      }
+  #  [2] Boundary Data
+  boundary = {
+      't_lb' : tv(boundary.t_lb), 'x_lb' : tv(boundary.x_lb),
+      't_ub' : tv(boundary.t_ub), 'x_ub' : tv(boundary.x_ub)
+      }
+  #  [3] Collocation Points
+  collocation = { 't' : tv(collocation.t), 'x' : tv(collocation.x) }
   return initial, boundary, collocation
