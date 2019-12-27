@@ -23,9 +23,10 @@ class NeuralNet(nn.Module):
 def jacobian(output, inputs, wrt=None, hess=False):
   if wrt is None:
     wrt = inputs
-  jacob = grad(output, inputs, grad_outputs=wrt, create_graph=True)[0] / inputs  # +scale
+  jacob = grad(output, inputs, grad_outputs=wrt, create_graph=True)[0]  # / inputs
   if hess:
-    return jacob, grad(jacob, inputs, grad_outputs=inputs, create_graph=True)[0] / inputs
+    return jacob, grad(jacob, inputs,
+        grad_outputs=inputs, create_graph=True)[0]  # / inputs
   return jacob
 
 

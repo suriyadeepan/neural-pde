@@ -1,7 +1,7 @@
 from neuralpde import nnutils
-
-import torch
 import numpy as np
+import torch
+import os
 
 
 def tx_norm(t, x, bounds):
@@ -182,7 +182,8 @@ class PiNeuralNet:
 class DeepHPM:
 
   def __init__(self, uv_layers, pde_layers, bounds,
-      lbfgs_max_iter=(20, 20), lbfgs_max_eval=(25, 25)):
+      lbfgs_max_iter=(20, 20), lbfgs_max_eval=(25, 25),
+      path='saved_models/'):
     self.bounds = bounds
     # initialize sub-networks
     self.u_net = nnutils.NeuralNet(uv_layers)
@@ -201,6 +202,13 @@ class DeepHPM:
         pde_net=self.idn_net.pde_net,        # use method of idn_net
         lbfgs_max_iter=lbfgs_max_iter[1],    # ..
         lbfgs_max_eval=lbfgs_max_eval[1])    # lbfgs options
+    # keep track of sub-networks
+    self.subnets = {
+        'u' : self.u_net, 'v' : self.v_net,
+        'pde_u' : self.pde_u_net, 'pde_v' : self.pde_v_net
+        }
+    # set path
+    self.path = path
 
   def train_idn_net(self, trainset, evalset, epochs=2):
     # expand trainset
@@ -244,3 +252,18 @@ class DeepHPM:
       v_error = torch.norm(ve - v_pred, p=2) / torch.norm(ve, p=2)
       uv_error = torch.norm(uv_e - uv_pred, p=2) / torch.norm(uv_e, p=2)
       print(f'[{i+1}] Error (u : {u_error}), (v : {v_error}), (uv : {uv_error})')
+
+  def load_subnets(self, path=None):
+    if path is None:
+      path = self.path
+    for name in self.subnets.keys():
+      print(f'Loading {os.path.join(path, name)}.pth')
+      self.subnets[name].load_state_dict(
+          torch.load(os.path.join(path, f'{name}.pth')))
+
+  def save_subnets(self, path=None):
+    if path is None:
+      path = self.path
+    for name, net in self.subnets.items():
+      print(f'Saving {os.path.join(path, name)}.pth')
+      torch.save(net.state_dict(), os.path.join(path, f'{name}.pth'))

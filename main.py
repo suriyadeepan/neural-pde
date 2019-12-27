@@ -2,10 +2,15 @@ from torch.autograd import Variable
 from neuralpde import dhpm
 from neuralpde import data
 from neuralpde import nnutils
-from neuralpde.nnutils import torch_em
+from neuralpde.nnutils import torch_em, tv
 
 import numpy as np
+import argparse
 import torch
+
+
+def to_list(s, type_=int):
+  return [ type_(item) for item in s.replace(' ', '').split(',') ]
 
 
 def validate_idn_net():
@@ -78,17 +83,43 @@ def train_idn_net():
   return idn_net
 
 
-if __name__ == '__main__':
+def predict(args, t=None, x=None):
+  # get bounds from schrodinger data
+  df, bounds = data.schrodinger()
+  # specs for sub-networks
+  uv_layers = to_list(args.uv_layers, int)
+  pde_layers = to_list(args.pde_layers, int)
+  # set training specs
+  lbfgs_max_iter = to_list(args.lbfgs_max_iter, int)
+  lbfgs_max_eval = to_list(args.lbfgs_max_eval, int)
+  model = dhpm.DeepHPM(uv_layers, pde_layers, bounds,  # model specs and space-time bounds
+            lbfgs_max_iter=lbfgs_max_iter, lbfgs_max_eval=lbfgs_max_eval)
+  model.load_subnets(args.model)
+  if t is None and x is None:
+    te, xe, ue, ve = torch_em(df.t, df.x, df.u, df.v)
+    u, v = model.idn_net.uv_net(te, xe)
+    u_error = torch.norm(ue - u, p=2) / torch.norm(ue, p=2)
+    v_error = torch.norm(ve - v, p=2) / torch.norm(ve, p=2)
+    print(f'[ error_u : {u_error.item()} ]')
+    print(f'[ error_v : {v_error.item()} ]')
+    return
+
+  u, v = model.idn_net.uv_net(tv(t).view(1,), tv(x).view(1,))
+  print(f'uv({args.time}, {args.space}) = {u.item()} + i{v.item()}')
+
+
+def train(args):
   # sample N data points
-  N = 10000
+  N = args.trainset_size
   schrod_df, bounds = data.schrodinger()
   # sub-sample from data frame
   trainset = schrod_df.sample(N)
   # specs for sub-networks
-  uv_layers = [2, 50, 50, 50, 50, 1]
-  pde_layers = [6, 100, 100, 1]
+  uv_layers = to_list(args.uv_layers, int)
+  pde_layers = to_list(args.pde_layers, int)
   # set training specs
-  lbfgs_max_iter, lbfgs_max_eval = (20, 20), (25, 25)
+  lbfgs_max_iter = to_list(args.lbfgs_max_iter, int)
+  lbfgs_max_eval = to_list(args.lbfgs_max_eval, int)
   model = dhpm.DeepHPM(uv_layers, pde_layers, bounds,  # model specs and space-time bounds
             lbfgs_max_iter=lbfgs_max_iter, lbfgs_max_eval=lbfgs_max_eval)
   # make train set
@@ -98,11 +129,62 @@ if __name__ == '__main__':
   t_eval, x_eval, u_eval, v_eval = torch_em(      # convert to torch tensors
       schrod_df.t, schrod_df.x, schrod_df.u, schrod_df.v)
   # train IDN net
-  # model.train_idn_net(
-  #     trainset=(t_train, x_train, u_train, v_train),
-  #     evalset=(t_eval, x_eval, u_eval, v_eval), epochs=2)
+  epochs = to_list(args.epochs)[0]
+  model.train_idn_net(
+       trainset=(t_train, x_train, u_train, v_train),
+       evalset=(t_eval, x_eval, u_eval, v_eval), epochs=epochs)
   # train PiNN
   #  feed Schrodinger Constraints data
+  epochs = to_list(args.epochs)[1]
   model.train_pinn(
       trainset=data.schrodinger_constraints(torched=True),
-      evalset=(t_eval, x_eval, u_eval, v_eval), epochs=1)
+      evalset=(t_eval, x_eval, u_eval, v_eval), epochs=epochs)
+  # After training, save trained models
+  model.save_subnets(args.savepath)
+
+
+# [ .... config .... ]
+parser = argparse.ArgumentParser(
+    description='neuralbec : Neural Network based simulation of BEC'
+    )
+parser.add_argument('--train', default=False, action='store_true',
+    help='Train DeepHPM model')
+parser.add_argument('--model', type=str, default=None, help='Path to Saved Model')
+parser.add_argument('--predict', default=False, action='store_true',
+    help='Path to Saved Model')
+parser.add_argument('--visualize', default=False, action='store_true',
+    help='Plot dynamics')
+parser.add_argument('-t', '--time', type=float, default=None,
+    help='Time step for Prediction')
+parser.add_argument('-x', '--space', type=float, default=None,
+    help='Space step for Prediction')
+parser.add_argument('-N', '--trainset-size', type=int, default=10000,
+    help='Training Set size')
+parser.add_argument('--uv-layers', type=str, default='2, 50, 50, 50, 50, 1',
+    help='Model spec for UV sub-network')
+parser.add_argument('--pde-layers', type=str, default='6, 100, 100, 1',
+  help='Model spec for PDE sub-network')
+parser.add_argument('--lbfgs-max-iter', type=str, default='30, 30',
+    help='LBFGS max_iter option')
+parser.add_argument('--lbfgs-max-eval', type=str, default='35, 35',
+    help='LBFGS max_eval option')
+parser.add_argument('--epochs', type=str, default='30, 30',
+    help='Number of training epochs')
+parser.add_argument('--savepath', type=str, default='saved_models',
+    help='Number of training epochs')
+
+
+if __name__ == '__main__':
+  args = parser.parse_args()
+  if args.train:          # train model
+    train(args)
+  elif args.model:        # load model from disk
+    if args.predict:
+      assert args.space and args.time
+      predict(args, args.time, args.space)  # predict (u, v) given (t, x)
+    elif args.visualize:
+      visualize(args)     # visualize dynamics
+    else:
+      predict(args)      # evaluate trained model
+  else:
+    print('Try getting --help')
