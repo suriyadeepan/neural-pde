@@ -173,6 +173,11 @@ class PiNeuralNet:
 
     self.lbfgs_optim_uv.step(closure)
 
+  def predict(self, t, x):
+    u, v, _, _ = self.uv_net(t, x)
+    f, g = self.fg_net(t, x)
+    return u, v, f, g
+
 
 class DeepHPM:
 
@@ -223,7 +228,19 @@ class DeepHPM:
     # return loss history
     return losses
 
-  def train_pinn(self, *data, epochs=2):
-    # create torch tensors and variables for training
+  def train_pinn(self, trainset, evalset, epochs=2):
+    # expand eval set
+    te, xe, ue, ve = evalset
+    # make variables
+    te, xe = nnutils.variable(te, xe)
     for i in range(epochs):
-      self.pinn.train(*data)
+      self.pinn.train(*trainset)
+      # run post-trianing prediction
+      #  predict (u, v, f, g)
+      u_pred, v_pred, f_pred, g_pred = self.pinn.predict(te, xe)
+      uv_pred = torch.sqrt(u_pred**2 + v_pred**2)
+      uv_e = torch.sqrt(ue**2 + ve**2)
+      u_error = torch.norm(ue - u_pred, p=2) / torch.norm(ue, p=2)
+      v_error = torch.norm(ve - v_pred, p=2) / torch.norm(ve, p=2)
+      uv_error = torch.norm(uv_e - uv_pred, p=2) / torch.norm(uv_e, p=2)
+      print(f'[{i+1}] Error (u : {u_error}), (v : {v_error}), (uv : {uv_error})')

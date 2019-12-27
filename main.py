@@ -103,4 +103,6 @@ if __name__ == '__main__':
   #     evalset=(t_eval, x_eval, u_eval, v_eval), epochs=2)
   # train PiNN
   #  feed Schrodinger Constraints data
-  model.train_pinn(*data.schrodinger_constraints(torched=True), epochs=1)
+  model.train_pinn(
+      trainset=data.schrodinger_constraints(torched=True),
+      evalset=(t_eval, x_eval, u_eval, v_eval), epochs=1)
