@@ -3,6 +3,7 @@ from neuralpde import dhpm
 from neuralpde import data
 from neuralpde import nnutils
 from neuralpde.nnutils import torch_em, tv
+from neuralpde.visualize import plot_dynamics
 
 import numpy as np
 import argparse
@@ -81,6 +82,21 @@ def train_idn_net():
     print(f'[{i+1}] Error (u, v) : ({u_error.item()}, {v_error.item()}')
 
   return idn_net
+
+
+def visualize(args):
+  # get bounds from schrodinger data
+  df, bounds = data.schrodinger()
+  # specs for sub-networks
+  uv_layers = to_list(args.uv_layers, int)
+  pde_layers = to_list(args.pde_layers, int)
+  # set training specs
+  model = dhpm.DeepHPM(uv_layers, pde_layers, bounds)  # model specs and space-time bounds
+  model.load_subnets(args.model)
+  te, xe, ue, ve = torch_em(df.t, df.x, df.u, df.v)
+  u, v = model.idn_net.uv_net(te, xe)
+  # visualize dynamics
+  plot_dynamics(bounds, u, v)
 
 
 def predict(args, t=None, x=None):
