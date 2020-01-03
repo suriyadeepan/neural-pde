@@ -46,8 +46,15 @@ def variable(*ts, requires_grad=True):
   return [ Variable(t, requires_grad=requires_grad) for t in ts ]
 
 
-def tv(a):
-  return Variable(torch.tensor(a).float(), requires_grad=True)
+def tv(a, shape=None):
+  tv_ = Variable(torch.tensor(a).float(), requires_grad=True)
+  if shape is not None:
+    tv_ = tv_.view(*shape)
+  return tv_
+
+
+def tvs(*a, shape=None):
+  return [ tv(ai, shape) for ai in a ]
 
 
 def t(a):
