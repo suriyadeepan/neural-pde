@@ -47,9 +47,11 @@ def variable(*ts, requires_grad=True):
 
 
 def tv(a, shape=None):
-  tv_ = Variable(torch.tensor(a).float(), requires_grad=True)
+  if not isinstance(a, torch.Tensor):
+    a = torch.tensor(a).float()
+  tv_ = Variable(a, requires_grad=True)
   if shape is not None:
-    tv_ = tv_.view(*shape)
+    tv_ = tv_.view(shape)
   return tv_
 
 
