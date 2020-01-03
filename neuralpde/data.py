@@ -32,6 +32,35 @@ def schrodinger(filepath="data/NLS.mat", N=None):
   return schrod_df, bounds
 
 
+def navierstokes_wake(filepath="data/cylinder_nektar_wake.mat", N=None):
+  # load matrix from file
+  mat = loadmat(filepath)
+  vec = mat['U_star']  # N x 2 x 200
+  p = mat['p_star']  # N x 200
+  t = mat['t']       # 200
+  x = mat['X_star']  # N x 2
+  x_len, t_len = x.shape[0], t.shape[0]
+  xx = np.tile(x[:, 0].reshape(-1, 1), (1, t_len))
+  yy = np.tile(x[:, 1].reshape(-1, 1), (1, t_len))
+  tt = np.tile(t, (1, x_len)).T
+  u = vec[:, 0, :].reshape(-1)
+  v = vec[:, 1, :].reshape(-1)
+  nsw_df = pd.DataFrame({
+    'x' : xx.reshape(-1), 'y' : yy.reshape(-1),
+    't' : tt.reshape(-1), 'p' : p.reshape(-1),
+    'u' : u, 'v' : v
+    })
+  # sample `N` points from data frame
+  if N is not None:
+    nsw_df = nsw_df.sample(N)
+  # construct bounds
+  X = np.concatenate(
+      [ nsw_df.x.values.reshape(-1, 1), nsw_df.y.values.reshape(-1, 1), 
+        nsw_df.t.values.reshape(-1, 1) ], axis=1)
+  bounds = (X.min(0), X.max(0))
+  return nsw_df, bounds, { 't' : t, 'x' : x, 'p' : p, 'vec' : vec }
+
+
 def schrodinger_constraints(filepath="data/NLS.mat", torched=False):
   df, bounds = schrodinger()
   # read mat file
