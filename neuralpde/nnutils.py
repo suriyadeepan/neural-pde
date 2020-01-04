@@ -3,6 +3,7 @@ from torch.autograd import grad
 import torch.nn as nn
 import torch
 
+import numpy as np
 import itertools
 
 
@@ -61,3 +62,15 @@ def tvs(*a, shape=None):
 
 def t(a):
   return torch.tensor(a).float()
+
+
+def batch(*args, i, batch_size=100):
+  return tuple([ arg[i * batch_size : (i + 1) * batch_size]
+      for arg in args ])
+
+
+def rand_batch(*args, batch_size=200):
+  num_batches = len(args[0]) // batch_size
+  # pick a batch
+  return batch(*args, i=np.random.randint(num_batches),
+      batch_size=batch_size)
