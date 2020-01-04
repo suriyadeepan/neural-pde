@@ -34,7 +34,9 @@ class PiDiscoveryNet:
     psi, p = psi.view(-1, 1), p.view(-1, 1)
     # calculate first derivative
     u, u_y = jacobian(psi, y, hess=True)
-    v, v_x = jacobian(psi, x, hess=True)
+    # v, v_x = jacobian(psi, x, hess=True)
+    v = -jacobian(psi, x)
+    v_x = jacobian(v, x)
     u_x, u_xx = jacobian(u, x, hess=True)
     v_y, v_yy = jacobian(v, y, hess=True)
     #   w.r.t `t`
@@ -49,7 +51,7 @@ class PiDiscoveryNet:
     # calculate f, g from eqn(6) pg.6
     f_u = u_t + self.lambda_1 * (u * u_x + v * u_y) + \
         p_x - self.lambda_2 * (u_xx + u_yy)
-    f_v = v_t + self.lambda_2 * (u * v_x + v * v_y) + \
+    f_v = v_t + self.lambda_1 * (u * v_x + v * v_y) + \
         p_y - self.lambda_2 * (v_xx + v_yy)
 
     return u, v, p, f_u, f_v
